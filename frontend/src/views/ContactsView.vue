@@ -312,7 +312,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import ContactDetailDialog from '@/components/contacts/ContactDetailDialog.vue';
 import DuplicateReviewDialog from '@/components/contacts/DuplicateReviewDialog.vue';
-import CareStatusBadge, { type CareStatusValue } from '@/components/ui/CareStatusBadge.vue';
+import CareStatusBadge from '@/components/ui/CareStatusBadge.vue';
+import type { CareStatusValue } from '@/constants/care-status';
 import { useToast } from '@/composables/use-toast';
 import {
   useContacts, useContactIntelligence,

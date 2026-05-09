@@ -297,7 +297,8 @@ import {
   GENDER_OPTIONS,
   formatRecentDateTime,
 } from '@/composables/use-contacts';
-import CareStatusBadge, { type CareStatusValue } from '@/components/ui/CareStatusBadge.vue';
+import CareStatusBadge from '@/components/ui/CareStatusBadge.vue';
+import type { CareStatusValue } from '@/constants/care-status';
 import { useToast } from '@/composables/use-toast';
 
 const router = useRouter();
