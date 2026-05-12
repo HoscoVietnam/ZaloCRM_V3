@@ -358,7 +358,7 @@ function lastMessagePreview(conv: Conversation): string {
     case 'gif': return prefix + '🎞️ GIF';
     case 'file': return prefix + '📎 ' + (titleText ? truncate(titleText, 40) : 'Tệp đính kèm');
     case 'link': return prefix + '🔗 ' + (titleText ? truncate(titleText, 40) : 'Liên kết');
-    case 'bank_transfer': return prefix + '🏦 Chuyển khoản';
+    case 'bank_transfer': return prefix + '🏦 Tài khoản ngân hàng';
     case 'call': return prefix + '📞 Cuộc gọi';
     case 'qr_code': return prefix + '📱 Mã QR';
     case 'reminder': return prefix + '📅 ' + (titleText ? truncate(titleText, 40) : 'Nhắc hẹn');

@@ -1,23 +1,23 @@
 <template>
   <div class="special-message" :data-type="type">
-    <!-- Bank Account card (Zalo zinstant.bankcard) — iframe Zalo PC HTML render -->
-    <div v-if="type === 'bank_transfer' && bankCardUrl" class="bank-card">
-      <iframe
-        :src="bankCardUrl"
-        class="bank-card-frame"
-        loading="lazy"
-        sandbox="allow-same-origin allow-scripts allow-popups"
-        referrerpolicy="no-referrer-when-downgrade"
-      ></iframe>
-      <div class="bank-card-footer">
-        <v-icon size="14" color="success" class="mr-1">mdi-bank-transfer</v-icon>
-        <span>{{ bankCardLabel || 'Tài khoản ngân hàng' }}</span>
-        <v-spacer />
-        <a :href="bankCardUrl" target="_blank" rel="noopener" class="bank-card-open">
-          Mở <v-icon size="11">mdi-open-in-new</v-icon>
-        </a>
+    <!-- Bank Account card (Zalo zinstant.bankcard) — click mở Zalo PC HTML tab mới
+         (Không dùng iframe vì Zalo CDN block X-Frame-Options). -->
+    <a
+      v-if="type === 'bank_transfer' && bankCardUrl"
+      :href="bankCardUrl"
+      target="_blank"
+      rel="noopener"
+      class="bank-card-link"
+    >
+      <div class="bank-card-icon">
+        <v-icon size="32" color="white">mdi-bank-transfer</v-icon>
       </div>
-    </div>
+      <div class="bank-card-body">
+        <div class="bank-card-title">{{ bankCardLabel || 'Tài khoản ngân hàng' }}</div>
+        <div class="bank-card-sub">Bấm để xem QR &amp; chuyển khoản nhanh</div>
+      </div>
+      <v-icon size="18" color="grey" class="bank-card-arrow">mdi-open-in-new</v-icon>
+    </a>
 
     <!-- Bank Transfer (legacy: có bankCode/amount inline) -->
     <v-card v-else-if="type === 'bank_transfer'" variant="tonal" color="success" class="pa-3" rounded="lg">
@@ -690,39 +690,55 @@ const linkDescription = computed<string>(() => {
   margin-top: 4px;
 }
 
-/* Bank account card (Zalo zinstant) — iframe full Zalo PC HTML render */
-.bank-card {
-  border: 1px solid var(--smax-grey-200, #e0e0e0);
-  border-radius: 12px;
-  overflow: hidden;
-  background: white;
-  max-width: 320px;
-}
-.bank-card-frame {
-  display: block;
-  width: 100%;
-  height: 220px;
-  border: 0;
-  background: #f5f5f5;
-}
-.bank-card-footer {
+/* Bank account card — clickable card với gradient bank icon */
+.bank-card-link {
   display: flex;
   align-items: center;
-  padding: 6px 10px;
-  background: rgba(76, 175, 80, 0.06);
-  border-top: 1px solid var(--smax-grey-200);
-  font-size: 11px;
-  color: var(--smax-grey-700);
-}
-.bank-card-open {
-  color: #2e7d32;
+  gap: 12px;
+  padding: 12px 14px;
   text-decoration: none;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  color: inherit;
+  background: linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%);
+  border: 1px solid #c8e6c9;
+  border-radius: 12px;
+  max-width: 320px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
-.bank-card-open:hover { text-decoration: underline; }
+.bank-card-link:hover {
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.18);
+  transform: translateY(-1px);
+}
+.bank-card-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #66bb6a, #2e7d32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3);
+}
+.bank-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.bank-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1b5e20;
+  line-height: 1.3;
+}
+.bank-card-sub {
+  font-size: 11px;
+  color: #558b2f;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.bank-card-arrow {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
 
 /* QR Code card */
 .qr-card {
