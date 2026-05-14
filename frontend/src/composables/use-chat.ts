@@ -194,16 +194,35 @@ export function useChat() {
 
     // Normalize quote: Zalo lưu với field 'msg' + 'fromD' thay vì 'content' + 'senderName'.
     // Map sang ReplyMessageRef chuẩn để MessageBubble render đúng.
+    // - msgType derive từ cliMsgType (Zalo numeric enum) hoặc parse attach JSON
+    //   khi msg rỗng (vd reply tin ảnh: msg="" + attach có thumbUrl → infer 'image').
     let reply: ReplyMessageRef | null = null;
     if (quote) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const q = quote as any;
+      const cliType = Number(q.cliMsgType ?? 0);
+      let msgType = String(q.msgType ?? '');
+      if (!msgType && cliType) {
+        // Zalo cliMsgType enum (partial): 1=text, 19=link, 22=video, 23=sticker,
+        // 24=voice, 30=file, 32=image, 38=card, 46=location
+        msgType = ({ 1: 'text', 19: 'link', 22: 'video', 23: 'sticker',
+          24: 'voice', 30: 'file', 32: 'image', 38: 'card', 46: 'location',
+        } as Record<number, string>)[cliType] || '';
+      }
+      // Fallback: parse attach JSON nếu cliMsgType missing
+      if (!msgType && typeof q.attach === 'string' && q.attach.length > 2) {
+        try {
+          const a = JSON.parse(q.attach);
+          if (a.thumbUrl || a.oriUrl) msgType = 'image';
+          else if (a.href) msgType = 'link';
+        } catch { /* ignore */ }
+      }
       reply = {
         msgId: String(q.msgId || q.msg_id || q.globalMsgId || ''),
         cliMsgId: q.cliMsgId,
         content: String(q.msg ?? q.content ?? ''),
         senderName: String(q.fromD ?? q.senderName ?? q.fromName ?? ''),
-        msgType: String(q.msgType ?? ''),
+        msgType,
         uidFrom: String(q.uidFrom ?? q.uid_from ?? ''),
         ts: String(q.ts ?? ''),
         propertyExt: q.propertyExt,

@@ -14,9 +14,10 @@
       <div class="ip-name-line" :title="headerFullName">{{ headerFullName }}</div>
       <div v-if="props.contact?.zaloUid" class="ip-id">UID: {{ props.contact.zaloUid }}</div>
       <div class="ip-care-row">
-        <button class="care-status-select" @click="onCycleCareStatus">
-          {{ careStatusLabel }} ▾
-        </button>
+        <CareStatusBadge
+          :model-value="(form.status as string | null) || 'new'"
+          @update:model-value="onChangeCareStatus"
+        />
       </div>
     </header>
 
@@ -370,6 +371,8 @@ import AiSentimentBadge from '@/components/ai/ai-sentiment-badge.vue';
 import AutomationCardList, { type AutomationCard } from './AutomationCardList.vue';
 import TagChipList from '@/components/ui/TagChipList.vue';
 import Avatar from '@/components/ui/Avatar.vue';
+import CareStatusBadge from '@/components/ui/CareStatusBadge.vue';
+import type { CareStatusValue } from '@/constants/care-status';
 import { useToast } from '@/composables/use-toast';
 import { api } from '@/api';
 
@@ -484,24 +487,9 @@ function friendKindClass(k: string): string {
   return 'pill-grey';
 }
 
-// ════════ Care status (status field — cycle through preset) ════════
-const CARE_STATUSES_LOCAL = [
-  { value: 'new',          label: '🆕 Mới' },
-  { value: 'interested',   label: '💬 Quan tâm' },
-  { value: 'caring',       label: '🤝 Chăm sóc' },
-  { value: 'negotiating',  label: '⚡ Đàm phán giá' },
-  { value: 'hot',          label: '🔥 Nóng' },
-  { value: 'cold',         label: '❄ Lạnh' },
-  { value: 'won',          label: '✅ Đã chốt' },
-];
-const careStatusLabel = computed(() => {
-  const found = CARE_STATUSES_LOCAL.find(s => s.value === form.status);
-  return found?.label || '🆕 Đặt trạng thái';
-});
-function onCycleCareStatus() {
-  const idx = CARE_STATUSES_LOCAL.findIndex(s => s.value === form.status);
-  const next = CARE_STATUSES_LOCAL[(idx + 1) % CARE_STATUSES_LOCAL.length];
-  form.status = next.value;
+// ════════ Care status (dropdown qua CareStatusBadge — emit value mới) ════════
+function onChangeCareStatus(value: CareStatusValue) {
+  form.status = value;
   saveContact();
 }
 

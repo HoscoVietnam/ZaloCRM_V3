@@ -962,12 +962,16 @@ watch(() => props.messages.length, async () => {
 
 // Khi đổi sang conv khác → reset scroll xuống đáy ngay + retry sau khi messages
 // load xong (messages.length thay đổi async sau khi parent fetch).
+// + Auto-focus input editor → gõ tin được ngay không cần click thêm
+//   (matching Zalo/Messenger native behavior). Skip mobile để tránh bật bàn phím ảo.
 watch(() => props.conversation?.id, async (newId) => {
   if (!newId) return;
   await nextTick();
   scrollToBottom();
-  // Retry sau khi messages async load — scrollToBottom đã có retry 100/400/1000ms
-  // nhưng nếu messages chưa thay đổi sau lần đầu thì watch messages.length sẽ trigger tiếp.
+  // Auto-focus editor — skip mobile (window.innerWidth < 768) tránh bật keyboard
+  if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+    setTimeout(() => editorRef.value?.focus(), 80);
+  }
 });
 
 // Auto-focus editor khi vào Reply / Edit mode — con trỏ chuột nằm trong ô input
