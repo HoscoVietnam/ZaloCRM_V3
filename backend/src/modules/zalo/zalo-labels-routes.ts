@@ -43,9 +43,11 @@ export async function syncLabelsForAccount(accountId: string, orgId: string): Pr
   if (!api) throw new Error('Zalo account chưa kết nối — không thể đồng bộ label');
   if (typeof api.getLabels !== 'function') throw new Error('SDK không hỗ trợ getLabels()');
 
+  logger.info(`[zalo-labels] Pulling from Zalo SDK for account ${accountId}...`);
   const res = await api.getLabels();
   const labelData: LabelDataFromSdk[] = res?.labelData || res?.data?.labelData || [];
   const version: number = res?.version || res?.data?.version || 0;
+  logger.info(`[zalo-labels] Got ${labelData.length} labels from Zalo (version=${version}) for account ${accountId}`);
 
   // Upsert all labels from SDK → DB
   const upserted = await prisma.$transaction(async (tx) => {
@@ -300,7 +302,15 @@ export async function zaloLabelsRoutes(app: FastifyInstance): Promise<void> {
         if (!target.conversations.includes(threadId)) target.conversations.push(threadId);
       }
 
-      await api.updateLabels({ labelData, version });
+      logger.info(`[zalo-labels] Pushing labelData (${labelData.length} labels, v=${version}) → Zalo for thread ${threadId}, newLabelId=${newLabelId}`);
+      try {
+        const writeRes = await api.updateLabels({ labelData, version });
+        logger.info(`[zalo-labels] Zalo updateLabels success → new version=${writeRes?.version}`);
+      } catch (sdkErr: unknown) {
+        const msg = sdkErr instanceof Error ? sdkErr.message : String(sdkErr);
+        logger.error(`[zalo-labels] Zalo updateLabels FAILED: ${msg}`);
+        return reply.status(502).send({ error: `Zalo từ chối: ${msg}` });
+      }
       const result = await syncLabelsForAccount(account.id, account.orgId);
       return { ok: true, assignedLabelId: newLabelId, ...result };
     } catch (err) {

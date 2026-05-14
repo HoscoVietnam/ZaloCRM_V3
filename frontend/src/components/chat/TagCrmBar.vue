@@ -1,52 +1,69 @@
 <template>
   <div class="tag-crm-bar" v-if="contactId">
     <div class="tag-pills">
+      <!-- Assigned pills (lấy style từ CrmTag master list nếu match) -->
       <span
         v-for="(tag, idx) in tags"
         :key="tag"
         class="tag-pill"
-        :class="`hue-${idx % 8}`"
-        :title="'Click × để xoá'"
+        :style="tagStyle(tag) || `border-color: ${fallbackHue(idx)}; color: ${fallbackHue(idx)}`"
+        :title="findDef(tag)?.description || 'Click × để xoá'"
       >
-        {{ tag }}
+        <span v-if="findDef(tag)?.emoji">{{ findDef(tag)?.emoji }} </span>{{ tag }}
         <button class="tag-x" title="Xoá tag" @click="removeTag(tag)">×</button>
       </span>
 
-      <!-- Add input or "+ Thêm thẻ mới" button -->
-      <span v-if="adding" class="tag-pill adding hue-add">
+      <!-- Quick-add picker từ CrmTag master (autocomplete + search) -->
+      <span v-if="adding" class="tag-pill adding">
         <input
           ref="addInput"
           v-model="newTag"
           class="tag-input-inline"
-          placeholder="Tên thẻ…"
+          placeholder="Gõ tên / chọn từ danh sách…"
+          list="crm-tag-options"
           @keydown.enter.prevent="confirmAdd"
           @keydown.escape.prevent="cancelAdd"
           @blur="confirmAdd"
         />
+        <datalist id="crm-tag-options">
+          <option v-for="def in availableDefs" :key="def.id" :value="def.name">
+            {{ def.category ? `[${def.category}]` : '' }} {{ def.description || '' }}
+          </option>
+        </datalist>
       </span>
       <button v-else class="tag-add-btn" @click="startAdd">
-        + Thêm thẻ mới
+        + Thêm thẻ
       </button>
     </div>
 
-    <!-- Quick-add suggestions (chỉ khi chưa có tag nào) -->
-    <div v-if="!tags.length && !adding" class="tag-suggestions">
-      <span class="sug-label">Gợi ý:</span>
+    <!-- Quick-add buttons từ CrmTag master (chỉ hiện khi chưa có tag nào) -->
+    <div v-if="!tags.length && !adding && tagDefs.length" class="tag-suggestions">
+      <span class="sug-label">Gắn nhanh:</span>
       <button
-        v-for="s in SUGGESTIONS"
-        :key="s.value"
+        v-for="def in tagDefs.slice(0, 8)"
+        :key="def.id"
         class="tag-sug"
-        :class="s.color"
-        @click="quickAdd(s.value)"
-      >+ {{ s.label }}</button>
+        :style="`color: ${def.color}; border-color: ${def.color}`"
+        @click="quickAdd(def.name)"
+      >+ <span v-if="def.emoji">{{ def.emoji }} </span>{{ def.name }}</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, onMounted } from 'vue';
 import { api } from '@/api/index';
 import { useToast } from '@/composables/use-toast';
+
+interface CrmTagDef {
+  id: string;
+  name: string;
+  color: string;
+  emoji: string | null;
+  description: string | null;
+  category: string | null;
+  isActive: boolean;
+}
 
 const props = defineProps<{
   contactId: string | null;
@@ -59,21 +76,45 @@ const emit = defineEmits<{
 
 const toast = useToast();
 
-const SUGGESTIONS = [
-  { value: 'TTAVIO', label: 'TTAVIO', color: 'hue-0' },
-  { value: 'EGV', label: 'EGV', color: 'hue-1' },
-  { value: 'Phiền', label: 'Phiền', color: 'hue-2' },
-  { value: 'Ấm', label: 'Ấm', color: 'hue-3' },
-  { value: 'Nóng', label: 'Nóng', color: 'hue-4' },
-  { value: 'Có tương tác', label: 'Có tương tác', color: 'hue-5' },
-  { value: 'Lạnh', label: 'Lạnh', color: 'hue-6' },
-  { value: 'Đàm Phán', label: 'Đàm Phán', color: 'hue-7' },
-];
+// CrmTag master list — fetch 1 lần, cache module-level dùng chung mọi instance
+const tagDefs = ref<CrmTagDef[]>([]);
+let fetchedOnce = false;
+
+async function loadTagDefs() {
+  if (fetchedOnce) return;
+  try {
+    const { data } = await api.get('/crm-tags');
+    tagDefs.value = (data.tags || []).filter((t: CrmTagDef) => t.isActive);
+    fetchedOnce = true;
+  } catch (err) {
+    console.warn('[crm-tags] Cannot load master list', err);
+  }
+}
 
 const tags = computed(() => props.modelValue || []);
 const adding = ref(false);
 const newTag = ref('');
 const addInput = ref<HTMLInputElement | null>(null);
+
+// Tag chưa gán → hiện trong autocomplete
+const availableDefs = computed(() =>
+  tagDefs.value.filter(d => !tags.value.includes(d.name)),
+);
+
+function findDef(name: string): CrmTagDef | null {
+  return tagDefs.value.find(d => d.name === name) || null;
+}
+
+function tagStyle(name: string): string | null {
+  const def = findDef(name);
+  if (!def) return null;
+  return `background: ${def.color}15; color: ${def.color}; border-color: ${def.color}`;
+}
+
+const FALLBACK_HUES = ['#c62828', '#1565c0', '#d84315', '#f9a825', '#ef6c00', '#2e7d32', '#00838f', '#6a1b9a'];
+function fallbackHue(idx: number): string {
+  return FALLBACK_HUES[idx % FALLBACK_HUES.length];
+}
 
 function startAdd() {
   adding.value = true;
@@ -95,6 +136,16 @@ async function confirmAdd() {
     return;
   }
   await persist([...tags.value, t]);
+
+  // Auto-create CrmTag definition nếu chưa có (free-text mới)
+  if (!findDef(t)) {
+    try {
+      const { data } = await api.post('/crm-tags', { name: t, category: 'Khác' });
+      tagDefs.value.push(data.tag);
+    } catch {
+      // Silent — Contact.tags vẫn lưu được
+    }
+  }
   cancelAdd();
 }
 
@@ -116,6 +167,8 @@ async function persist(next: string[]) {
     toast.error('Lưu tag thất bại');
   }
 }
+
+onMounted(() => { void loadTagDefs(); });
 </script>
 
 <style scoped>
@@ -147,18 +200,11 @@ async function persist(next: string[]) {
   white-space: nowrap;
   transition: filter 0.12s;
 }
-.tag-pill.adding { padding: 0 6px; }
-
-/* 8 màu hue rotation (giống screenshot Smax) */
-.hue-0 { color: #c62828; border-color: #ef9a9a; }   /* red — TTAVIO */
-.hue-1 { color: #1565c0; border-color: #90caf9; }   /* blue — EGV */
-.hue-2 { color: #d84315; border-color: #ffab91; }   /* deep orange — Phiền */
-.hue-3 { color: #f9a825; border-color: #fff59d; }   /* yellow — Ấm */
-.hue-4 { color: #ef6c00; border-color: #ffcc80; }   /* orange — Nóng */
-.hue-5 { color: #2e7d32; border-color: #a5d6a7; }   /* green — Có tương tác */
-.hue-6 { color: #00838f; border-color: #80deea; }   /* cyan — Lạnh */
-.hue-7 { color: #6a1b9a; border-color: #ce93d8; }   /* purple — Đàm phán */
-.hue-add { color: var(--smax-primary, #2962ff); border-color: var(--smax-primary); }
+.tag-pill.adding {
+  padding: 0 6px;
+  color: var(--smax-primary, #2962ff);
+  border-color: var(--smax-primary);
+}
 
 .tag-x {
   background: none;

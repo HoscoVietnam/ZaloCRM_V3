@@ -69,8 +69,7 @@
                     v-for="lbl in allLabels"
                     :key="lbl.id"
                     class="zlbl-option"
-                    :class="{ active: currentLabel?.id === lbl.id, busy: assigningLabel }"
-                    :disabled="assigningLabel"
+                    :class="{ active: currentLabel?.id === lbl.id }"
                     @click="onPickLabel(lbl)"
                   >
                     <span class="zlbl-flag" :style="`color: ${lbl.color}`">⚑</span>
@@ -554,7 +553,6 @@ type AccountLabelView = {
 
 const allLabels = ref<AccountLabelView[]>([]);
 const loadingAllLabels = ref(false);
-const assigningLabel = ref(false);
 
 // currentLabel: tìm label có assignedTo=true (do BE trả về khi pass threadId).
 // Fallback: nếu allLabels chưa load, dùng friendship.zaloLabels[0] (chỉ cho user threads).
@@ -615,24 +613,38 @@ watch(() => props.conversation?.id, (newId, oldId) => {
   }
 }, { immediate: true });
 
+/* Optimistic UI: update assignedTo flags + currentLabel NGAY (không disable mờ chờ).
+ * API call chạy background. Nếu fail → rollback to snapshot + toast error. */
 async function onPickLabel(label: AccountLabelView) {
   const accId = props.conversation?.zaloAccount?.id;
   const threadId = props.conversation?.externalThreadId;
-  if (!accId || !threadId || assigningLabel.value) return;
-  assigningLabel.value = true;
+  if (!accId || !threadId) return;
+
+  // Toggle: nếu đang active → unassign (null), ngược lại assign labelId
+  const labelId = currentLabel.value?.id === label.id ? null : label.id;
+
+  // Snapshot trước khi mutate để rollback nếu fail
+  const snapshot = allLabels.value.map(l => ({ ...l }));
+
+  // Optimistic mutation: clear assignedTo trên mọi label rồi set flag trên label được chọn.
+  allLabels.value = allLabels.value.map(l => ({
+    ...l,
+    assignedTo: labelId !== null && l.id === labelId,
+  }));
+
+  toast.success(labelId ? `✓ Đã gắn "${label.text}"` : `✓ Đã bỏ tag`);
+
+  // API call background — không await, không disable UI
   try {
     const { api: apiClient } = await import('@/api/index');
-    // Toggle: nếu đang active → unassign (null), ngược lại assign labelId
-    const labelId = currentLabel.value?.id === label.id ? null : label.id;
-    // Dùng assign-thread (hỗ trợ cả user + group), thay vì /friends/:id route
     await apiClient.post(`/zalo-accounts/${accId}/labels/assign-thread`, { threadId, labelId });
-    toast.success(labelId ? `✓ Đã gắn "${label.text}"` : `✓ Đã bỏ tag`);
-    await fetchAllLabels(accId, threadId);
+    // Reconcile với BE (BE đã re-sync nên trả về authoritative state)
+    void fetchAllLabels(accId, threadId);
     window.dispatchEvent(new CustomEvent('zalo-labels-synced', { detail: { accountId: accId } }));
   } catch (err: any) {
-    toast.error(err.response?.data?.error || 'Không gán được tag');
-  } finally {
-    assigningLabel.value = false;
+    // Rollback optimistic mutation
+    allLabels.value = snapshot;
+    toast.error(err.response?.data?.error || 'Không gán được tag — đã hoàn tác');
   }
 }
 
@@ -652,7 +664,7 @@ async function onSyncLabels() {
 }
 
 function goToLabelsSettings() {
-  window.location.assign('/settings/zalo-labels');
+  window.location.assign('/settings?tab=zalo-labels');
 }
 
 // CRM tags pulled from contact — local mirror to avoid stale prop after PATCH.

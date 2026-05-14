@@ -1,11 +1,9 @@
 <template>
   <div class="zlbl-settings">
-    <header class="page-header">
-      <button class="back-btn" @click="$router.back()">←</button>
-      <h1>🏷 Tag Zalo Real — Cài đặt</h1>
+    <header class="settings-section-header">
       <p class="subtitle">
-        Đồng bộ tag Zalo native từ từng nick Zalo của hệ thống. Sửa màu / tên sẽ
-        ghi ngược về Zalo client (2 chiều realtime, auto-sync mỗi 60 giây).
+        Đồng bộ 2 chiều với Zalo client — auto khi đổi cuộc trò chuyện (cooldown 5s).
+        Sửa màu / tên / emoji bên CRM sẽ ghi ngược về Zalo. Sửa bên Zalo sẽ tự kéo về.
       </p>
     </header>
 
@@ -220,34 +218,12 @@ onBeforeUnmount(() => { if (refreshInterval) clearInterval(refreshInterval); });
 <style scoped>
 .zlbl-settings {
   max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px 28px;
 }
-.page-header {
-  margin-bottom: 24px;
-  position: relative;
-}
-.back-btn {
-  position: absolute;
-  left: -8px;
-  top: 4px;
-  background: var(--smax-grey-100);
-  border: 1px solid var(--smax-grey-200);
-  font-size: 18px;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--smax-grey-700);
-}
-.back-btn:hover { background: var(--smax-grey-200); }
-.page-header h1 {
-  font-size: 22px;
-  margin: 0 0 6px 32px;
-  color: var(--smax-text);
+.settings-section-header {
+  margin-bottom: 16px;
 }
 .subtitle {
-  margin: 0 0 0 32px;
+  margin: 0 0 4px 0;
   font-size: 13px;
   color: var(--smax-grey-600);
   line-height: 1.5;

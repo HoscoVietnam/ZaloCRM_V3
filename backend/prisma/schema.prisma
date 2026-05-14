@@ -37,6 +37,7 @@ model Organization {
   parentCandidates    ParentCandidate[]
   notes               Note[]
   zaloLabels          ZaloLabel[]
+  crmTags             CrmTag[]
 
   @@map("organizations")
 }
@@ -414,6 +415,31 @@ model Note {
   @@index([orgId, contactId, createdAt])
   @@index([parentNoteId])
   @@map("notes")
+}
+
+// CRM tag — tag SYSTEM-LEVEL do org tự định nghĩa (vd "vip", "quan_tâm", "hot_lead").
+// Khác ZaloLabel (Zalo native, sync 2-way với Zalo SDK).
+// Contact.tags JSON array of strings tham chiếu CrmTag.name. Nếu name không match
+// trong CrmTag table → vẫn cho lưu (free-text) nhưng FE hint user thêm vào table.
+model CrmTag {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  name        String                                   // unique per org, dùng làm reference key
+  color       String   @default("#90A4AE")             // hex color
+  emoji       String?                                  // optional unicode emoji prefix
+  description String?                                  // mô tả mục đích, vd "Khách quan tâm dự án EGV"
+  category    String?                                  // gom nhóm (vd "Mức độ", "Nguồn", "Hành vi")
+  order       Int      @default(0)                     // sort order trong settings
+  isActive    Boolean  @default(true) @map("is_active")
+  usageCount  Int      @default(0) @map("usage_count") // denorm — cập nhật khi recompute
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, name])
+  @@index([orgId, category])
+  @@map("crm_tags")
 }
 
 // Zalo native labels — synced từ Zalo SDK getLabels() per nick.
