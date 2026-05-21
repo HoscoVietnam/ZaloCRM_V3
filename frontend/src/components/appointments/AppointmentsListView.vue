@@ -37,7 +37,18 @@
         </div>
         <!-- Col 2: Avatar + tên KH + SDT -->
         <div class="col col-customer">
-          <div class="av" :style="{ background: saleColor(ownerId(a)).bg }">{{ initials(a.contact?.fullName) }}</div>
+          <div
+            class="av"
+            :style="resolveContactAvatar(a.contact) ? {} : { background: saleColor(ownerId(a)).bg }"
+          >
+            <img
+              v-if="resolveContactAvatar(a.contact)"
+              :src="resolveContactAvatar(a.contact) || ''"
+              alt=""
+              @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+            />
+            <template v-else>{{ initials(a.contact?.fullName) }}</template>
+          </div>
           <div class="info">
             <div class="name">
               {{ a.contact?.fullName || 'Khách hàng' }}
@@ -100,6 +111,7 @@ import {
   typeLabel,
   statusLabel,
   initials,
+  resolveContactAvatar,
   appointmentOwnerId as ownerId,
   appointmentOwnerName as ownerName,
   appointmentStart,
@@ -315,6 +327,12 @@ const grouped = computed(() => {
   font-weight: 500;
   font-size: 12px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.col-customer .av img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: var(--at-r-pill);
+  display: block;
 }
 .col-customer .info { min-width: 0; flex: 1; }
 .col-customer .info .name {

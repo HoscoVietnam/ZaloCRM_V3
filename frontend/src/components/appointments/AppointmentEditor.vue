@@ -450,6 +450,21 @@ function toContactLite(c: any): ContactLite {
   };
 }
 
+/** Fetch contact detail (includes friends) khi prefillContact / edit-mode chưa có
+ *  avatar info đầy đủ. Async — patch selectedContact in-place khi xong (chỉ nếu user
+ *  chưa pick contact khác trong thời gian fetch). */
+async function enrichContactAvatar(contactId: string) {
+  try {
+    const res = await api.get(`/contacts/${contactId}`);
+    const enriched = toContactLite(res.data);
+    if (selectedContact.value?.id === contactId && enriched.avatarUrl) {
+      selectedContact.value = { ...selectedContact.value, avatarUrl: enriched.avatarUrl };
+    }
+  } catch (err) {
+    console.warn('[editor] avatar enrich fetch failed', err);
+  }
+}
+
 let custSearchHandle: number | null = null;
 function onCustSearch() {
   if (custSearchHandle) window.clearTimeout(custSearchHandle);
@@ -579,6 +594,11 @@ watch(() => props.modelValue, (open) => {
     form.notes = a.notes || '';
     form.assignedUserId = (a as any).assignedUserId ?? (a as any).assignedTo?.id ?? null;
     selectedContact.value = a.contact ? toContactLite(a.contact) : null;
+    // Edit mode: appointment endpoint trả friends top-5 (xem APPOINTMENT_INCLUDE),
+    // nhưng nếu KH ko có Zalo nick nào → vẫn fetch detail để chắc chắn có avatar.
+    if (selectedContact.value?.id && !selectedContact.value.avatarUrl) {
+      enrichContactAvatar(selectedContact.value.id);
+    }
     calMonth.value = a.appointmentDate ? new Date(a.appointmentDate) : new Date();
   } else {
     // Create mode
@@ -591,10 +611,15 @@ watch(() => props.modelValue, (open) => {
     form.notes = '';
     form.assignedUserId = currentUserId.value; // default sale = người tạo
     // Prefill: nếu parent truyền object có sẵn friends → resolve avatar fallback,
-    // không thì giữ nguyên (parent có thể đã set avatarUrl chuẩn)
+    // không thì giữ nguyên (parent có thể đã set avatarUrl chuẩn).
     selectedContact.value = props.prefillContact
       ? toContactLite(props.prefillContact)
       : null;
+    // Parent (ChatAppointments, CustomerTimelineSection) thường chỉ truyền {id, fullName}
+    // → fetch detail để enrich avatar (Contact.avatarUrl + Friend.zaloAvatarUrl fallback).
+    if (selectedContact.value?.id && !selectedContact.value.avatarUrl) {
+      enrichContactAvatar(selectedContact.value.id);
+    }
     // Tiêu đề default = template theo loại hiện tại (call), kèm tên KH nếu prefill
     form.title = buildTitleFromType(form.type);
     calMonth.value = new Date(base);

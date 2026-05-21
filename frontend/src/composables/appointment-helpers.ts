@@ -83,6 +83,21 @@ export function statusLabel(status: string): string {
   return APPOINTMENT_STATUS_OPTIONS.find(o => o.value === status)?.text ?? status;
 }
 
+/**
+ * Resolve avatar URL từ contact: ưu tiên Contact.avatarUrl (manual upload), fallback
+ * sang Friend.zaloAvatarUrl của friend hoạt động gần nhất (per-nick Zalo profile pic).
+ * KH import từ Zalo thường có Contact.avatarUrl=null vì avatar lưu per-nick ở Friend.
+ */
+export function resolveContactAvatar(contact: any): string | null {
+  if (!contact) return null;
+  if (contact.avatarUrl) return contact.avatarUrl;
+  const friends = contact.friends || [];
+  for (const f of friends) {
+    if (f?.zaloAvatarUrl) return f.zaloAvatarUrl;
+  }
+  return null;
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
