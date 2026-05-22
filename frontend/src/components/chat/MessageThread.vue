@@ -1887,16 +1887,11 @@ watch(() => props.editingMessage?.id, async (id) => {
 /* ════════ Privacy blur — message bubble (cột 3) ════════ */
 /* Anh chốt 2026-05-22: chỉ blur text + avatar tròn KH, KHÔNG che cả row
    bằng overlay ngang lớn. Inline tag "🔒 Riêng tư" cạnh bubble.
-   FIX 2026-05-22: KHÔNG set display:flex cho wrapper default — sẽ phá
-   layout self/other của MessageBubble (msg-row.self justify-content:flex-end
-   cần parent là block để self align right). Chỉ flex khi blurred. */
+   FIX 2026-05-22 v2: KHÔNG dùng display:flex cho wrapper kể cả khi blurred
+   — vì MessageBubble bên trong dùng .msg-row.self { justify-content:flex-end }
+   cần parent block. Inline tag dùng position:absolute → không phá layout. */
 .msg-bubble-wrap { position: relative; }
-.msg-bubble-wrap.msg-privacy-blurred {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  cursor: pointer;
-}
+.msg-bubble-wrap.msg-privacy-blurred { cursor: pointer; }
 /* Blur message bubble content + avatar (target VBubble + Avatar components inside MessageBubble) */
 .msg-privacy-blurred :deep(.message-bubble),
 .msg-privacy-blurred :deep(.bubble-text),
@@ -1921,8 +1916,12 @@ watch(() => props.editingMessage?.id, async (id) => {
   filter: blur(10px) saturate(0.3);
   opacity: 0.65;
 }
-/* Inline tag "🔒 Riêng tư" cạnh bubble — nhỏ gọn không che row */
+/* Inline tag "🔒 Riêng tư" — position absolute để KHÔNG phá layout self/other.
+   Floating top-right of wrapper, z-index trên bubble. */
 .msg-privacy-inline-tag {
+  position: absolute;
+  top: -8px;
+  right: 16px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -1932,13 +1931,14 @@ watch(() => props.editingMessage?.id, async (id) => {
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 9999px;
-  border: 1px solid rgba(170, 45, 0, 0.2);
+  border: 1px solid rgba(170, 45, 0, 0.25);
   white-space: nowrap;
-  align-self: center;
-  flex-shrink: 0;
   cursor: pointer;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
-.msg-privacy-inline-tag:hover {
+.msg-privacy-blurred:hover .msg-privacy-inline-tag {
   background: #aa2d00;
   color: white;
   border-color: #aa2d00;
