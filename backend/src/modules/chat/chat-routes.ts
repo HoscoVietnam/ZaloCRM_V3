@@ -371,7 +371,7 @@ export async function chatRoutes(app: FastifyInstance) {
               priorityScore: true,
             },
           },
-          zaloAccount: { select: { id: true, displayName: true, avatarUrl: true, zaloUid: true } },
+          zaloAccount: { select: { id: true, displayName: true, avatarUrl: true, zaloUid: true, privacyMode: true, ownerUserId: true } },
           pins: { select: { id: true } },
           messages: {
             take: 1,
