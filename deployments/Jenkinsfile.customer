@@ -10,7 +10,7 @@ pipeline {
     parameters {
         string(
             name: 'CUSTOMER_NAME',
-            defaultValue: 'develop',
+            defaultValue: 'hosco',
             description: 'Customer identifier (lowercase, no spaces). Used to derive host dir, container names, image name, and compose file.'
         )
         choice(
@@ -25,27 +25,27 @@ pipeline {
         )
         string(
             name: 'APP_PORT',
-            defaultValue: '3081',
+            defaultValue: '3080',
             description: 'Host port for the app service.'
         )
         string(
             name: 'DB_PORT',
-            defaultValue: '5434',
+            defaultValue: '5432',
             description: 'Host port for PostgreSQL.'
         )
         string(
             name: 'REDIS_PORT',
-            defaultValue: '6380',
+            defaultValue: '6379',
             description: 'Host port for Redis.'
         )
         string(
             name: 'MINIO_API_PORT',
-            defaultValue: '9002',
+            defaultValue: '9000',
             description: 'Host port for MinIO S3 API.'
         )
         string(
             name: 'MINIO_CONSOLE_PORT',
-            defaultValue: '9003',
+            defaultValue: '9001',
             description: 'Host port for MinIO Console.'
         )
     }
@@ -65,6 +65,16 @@ pipeline {
         MINIO_CONSOLE_PORT = "${params.MINIO_CONSOLE_PORT}"
     }
     stages {
+        stage('Validate parameters') {
+            steps {
+                script {
+                    if (params.CUSTOMER_NAME != params.CUSTOMER_NAME.toLowerCase() || params.CUSTOMER_NAME.contains(' ')) {
+                        error "CUSTOMER_NAME must be lowercase with no spaces. Got: '${params.CUSTOMER_NAME}'"
+                    }
+                    echo "CUSTOMER_NAME: '${params.CUSTOMER_NAME}' is valid."
+                }
+            }
+        }
         stage('Prepare host dirs') {
             when {
                 expression {

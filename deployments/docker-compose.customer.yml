@@ -7,7 +7,7 @@ services:
     container_name: zalo-crm-${CUSTOMER_NAME:?err}-app
     restart: unless-stopped
     ports:
-      - '${APP_PORT:-3081}:3000'
+      - '${APP_PORT:-3080}:3000'
     env_file:
       - /home/ZaloCRM_${CUSTOMER_NAME:?err}/.env
     environment:
@@ -43,7 +43,7 @@ services:
     volumes:
       - '/home/ZaloCRM_${CUSTOMER_NAME:?err}/pg_data:/var/lib/postgresql/data'
     ports:
-      - '127.0.0.1:${DB_PORT:-5434}:5432'
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     healthcheck:
       test:
         - CMD-SHELL
@@ -63,7 +63,7 @@ services:
     volumes:
       - '/home/ZaloCRM_${CUSTOMER_NAME:?err}/redis_data:/data'
     ports:
-      - '127.0.0.1:${REDIS_PORT:-6380}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     healthcheck:
       test:
         - CMD
@@ -86,8 +86,8 @@ services:
     volumes:
       - '/home/ZaloCRM_${CUSTOMER_NAME:?err}/minio_data:/data'
     ports:
-      - '${MINIO_API_PORT:-9002}:9000'
-      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9003}:9001'
+      - '${MINIO_API_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
     healthcheck:
       test:
         - CMD
