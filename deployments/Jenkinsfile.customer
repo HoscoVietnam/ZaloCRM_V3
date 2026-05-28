@@ -1,0 +1,233 @@
+pipeline {
+    agent {
+        label 'docker-node'
+    }
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    parameters {
+        string(
+            name: 'CUSTOMER_NAME',
+            defaultValue: 'develop',
+            description: 'Customer identifier (lowercase, no spaces). Used to derive host dir, container names, image name, and compose file.'
+        )
+        choice(
+            name: 'DEPLOY_MODE',
+            choices: ['BUILD', 'ROLLBACK'],
+            description: 'BUILD to build and deploy a new image; ROLLBACK to revert to the previous image.'
+        )
+        booleanParam(
+            name: 'ENABLE_REDIS',
+            defaultValue: true,
+            description: 'When ticked, starts Redis alongside the other services.'
+        )
+        string(
+            name: 'APP_PORT',
+            defaultValue: '3081',
+            description: 'Host port for the app service.'
+        )
+        string(
+            name: 'DB_PORT',
+            defaultValue: '5434',
+            description: 'Host port for PostgreSQL.'
+        )
+        string(
+            name: 'REDIS_PORT',
+            defaultValue: '6380',
+            description: 'Host port for Redis.'
+        )
+        string(
+            name: 'MINIO_API_PORT',
+            defaultValue: '9002',
+            description: 'Host port for MinIO S3 API.'
+        )
+        string(
+            name: 'MINIO_CONSOLE_PORT',
+            defaultValue: '9003',
+            description: 'Host port for MinIO Console.'
+        )
+    }
+    environment {
+        COMPOSE_FILE = 'deployments/docker-compose.customer.yml'
+        HOST_DIR = "/home/ZaloCRM_${params.CUSTOMER_NAME}"
+        ENV_FILE = "${HOST_DIR}/.env"
+        BACKUPS_DIR = "${HOST_DIR}/backups"
+        DB_CONTAINER = "zalo-crm-${params.CUSTOMER_NAME}-db"
+        APP_IMAGE = "zalocrm_${params.CUSTOMER_NAME}_app"
+        APP_URL = "http://127.0.0.1:${params.APP_PORT}"
+        CUSTOMER_NAME = "${params.CUSTOMER_NAME}"
+        APP_PORT = "${params.APP_PORT}"
+        DB_PORT = "${params.DB_PORT}"
+        REDIS_PORT = "${params.REDIS_PORT}"
+        MINIO_API_PORT = "${params.MINIO_API_PORT}"
+        MINIO_CONSOLE_PORT = "${params.MINIO_CONSOLE_PORT}"
+    }
+    stages {
+        stage('Prepare host dirs') {
+            when {
+                expression {
+                    params.DEPLOY_MODE == 'BUILD'
+                }
+            }
+            steps {
+                sh """
+                    mkdir -p ${HOST_DIR}
+                    mkdir -p ${HOST_DIR}/pg_data ${HOST_DIR}/minio_data ${HOST_DIR}/redis_data ${HOST_DIR}/files ${HOST_DIR}/backups
+                """
+                script {
+                    def envFile = "${HOST_DIR}/.env"
+                    if (!fileExists(envFile)) {
+                        error(".env file not found at ${envFile}")
+                    }
+                    def envContent = readFile(envFile)
+                    def required = ['JWT_SECRET', 'ENCRYPTION_KEY', 'DB_PASSWORD', 'MINIO_ROOT_PASSWORD']
+                    def missing = []
+                    for (key in required) {
+                        if (!envContent.contains("${key}=")) {
+                            missing.add(key)
+                        }
+                    }
+                    if (missing) {
+                        error("Missing required secret(s) in ${envFile}: ${missing.join(', ')}")
+                    }
+                    echo 'Host directories and .env validated successfully.'
+                }
+            }
+        }
+        stage('Backup database') {
+            when {
+                expression {
+                    params.DEPLOY_MODE == 'BUILD'
+                }
+            }
+            steps {
+                script {
+                    def containerRunning = sh(
+                        script: "docker ps -q -f name=${DB_CONTAINER}",
+                        returnStdout: true
+                    ).trim()
+                    if (containerRunning.isEmpty()) {
+                        echo "Container ${DB_CONTAINER} not running — skipping database backup."
+                    } else {
+                        try {
+                            sh """
+                                set -a
+                                . ${HOST_DIR}/.env
+                                set +a
+                                timestamp=\$(date +%Y%m%d_%H%M%S)
+                                backup_file="${BACKUPS_DIR}/zalocrm_\${timestamp}.sql.gz"
+                                docker exec \\
+                                    -e PGPASSWORD="\${DB_PASSWORD}" \\
+                                    ${DB_CONTAINER} \\
+                                    pg_dump -U "\${DB_USER:-crmuser}" "\${DB_NAME:-zalocrm}" \\
+                                    | gzip > "\${backup_file}"
+                                echo "Backup saved to \${backup_file}"
+                            """
+                        } catch (Exception e) {
+                            echo "WARNING: Database backup failed — continuing pipeline. Error: ${e.message}"
+                        }
+                    }
+                }
+            }
+        }
+        stage('Tag previous image') {
+            when {
+                expression {
+                    params.DEPLOY_MODE == 'BUILD'
+                }
+            }
+            steps {
+                script {
+                    def imageExists = sh(
+                        script: "docker image inspect ${APP_IMAGE}:latest >/dev/null 2>&1 && echo exists || echo not_found",
+                        returnStdout: true
+                    ).trim()
+                    if (imageExists == 'exists') {
+                        sh "docker tag ${APP_IMAGE}:latest ${APP_IMAGE}:previous"
+                        echo "Tagged ${APP_IMAGE}:latest as ${APP_IMAGE}:previous"
+                    } else {
+                        echo "No existing ${APP_IMAGE}:latest image — skipping previous tag."
+                    }
+                }
+            }
+        }
+        stage('Build') {
+            when {
+                expression {
+                    params.DEPLOY_MODE == 'BUILD'
+                }
+            }
+            steps {
+                sh "docker compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} build --pull"
+                echo 'Docker image built successfully.'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    if (params.DEPLOY_MODE == 'ROLLBACK') {
+                        def previousExists = sh(
+                            script: "docker image inspect ${APP_IMAGE}:previous >/dev/null 2>&1 && echo exists || echo not_found",
+                            returnStdout: true
+                        ).trim()
+                        if (previousExists != 'exists') {
+                            error "Cannot roll back — no ${APP_IMAGE}:previous image found."
+                        }
+                        sh "docker tag ${APP_IMAGE}:previous ${APP_IMAGE}:latest"
+                        echo "Rolled back: tagged ${APP_IMAGE}:previous as ${APP_IMAGE}:latest"
+                    }
+                    def redisFlag = params.ENABLE_REDIS ? '--profile redis': ''
+                    sh "docker compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} ${redisFlag} up -d --remove-orphans --force-recreate"
+                    echo 'Deployment complete.'
+                }
+            }
+        }
+        stage('Health check') {
+            steps {
+                script {
+                    def healthy = false
+                    for (int i = 1; i <= 12; i++) {
+                        def response = sh(
+                            script: "curl -s -o /dev/null -w '%{http_code}' ${APP_URL} || true",
+                            returnStdout: true
+                        ).trim()
+                        if (response == '200' || response == '301' || response == '302') {
+                            healthy = true
+                            echo "App is healthy (HTTP ${response}) after ${i * 5}s"
+                            break
+                        }
+                        echo "Attempt ${i}/12 — HTTP ${response}, retrying in 5s..."
+                        sleep(5)
+                    }
+                    if (!healthy) {
+                        error 'App did not become healthy within 60 seconds.'
+                    }
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                echo '=== Pipeline FAILED — collecting diagnostics ==='
+                sh 'docker ps -a || true'
+                sh "docker logs zalo-crm-${params.CUSTOMER_NAME}-app --tail 200 2>&1 || true"
+                sh "docker logs zalo-crm-${params.CUSTOMER_NAME}-db --tail 100 2>&1 || true"
+                sh "docker logs zalo-crm-${params.CUSTOMER_NAME}-minio --tail 50 2>&1 || true"
+            }
+        }
+        success {
+            script {
+                echo '=== Pipeline succeeded — cleaning up ==='
+                sh 'docker image prune -f || true'
+                sh 'docker builder prune -f || true'
+                echo '=== Post-deploy stats ==='
+                sh "docker ps --filter \"name=zalo-crm-${params.CUSTOMER_NAME}\" --format \"table {{.ID}}\\t{{.Names}}\\t{{.CreatedAt}}\\t{{.Status}}\" || true"
+                echo "--- Images (${APP_IMAGE}) ---"
+                sh "docker images ${APP_IMAGE} || true"
+            }
+        }
+    }
+}
